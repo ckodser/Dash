@@ -1,0 +1,191 @@
+
+# Helper functions for loading models, preprocessing images, and visualization.
+
+import torch
+from transformers import (
+    AutoModelForCausalLM, AutoTokenizer,
+    PaliGemmaForConditionalGeneration, PaliGemmaProcessor,
+    OwlViTForObjectDetection, OwlViTProcessor,
+    CLIPModel, CLIPProcessor
+)
+from PIL import Image, ImageDraw, ImageFont
+import requests
+import os
+import math
+from typing import Dict, List
+from dreamsim import dreamsim
+
+import config
+
+
+# --- Model Loading ---
+
+def load_models(vlm_model_name: str, device: str) -> dict:
+    """Loads all required models from Hugging Face and moves them to the specified device."""
+    print("Loading all models... This might take a while.")
+
+    # LLM for Query Generation
+    llm_tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME)
+    # Use bfloat16 for memory efficiency if available
+    llm_model = AutoModelForCausalLM.from_pretrained(
+        config.LLM_MODEL_NAME,
+        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto",
+        cache_dir=config.HF_HOME
+    )
+
+    # VLM for Filtering
+    vlm = PaliGemmaForConditionalGeneration.from_pretrained(
+        vlm_model_name,
+        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        cache_dir=config.HF_HOME
+    ).to(device).eval()
+
+    # Object Detector
+    object_detector = OwlViTForObjectDetection.from_pretrained(
+        config.OBJECT_DETECTOR_MODEL_NAME,
+        cache_dir=config.HF_HOME
+    ).to(device).eval()
+
+    # CLIP for Retrieval
+    clip = CLIPModel.from_pretrained(
+        config.CLIP_MODEL_NAME,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        cache_dir=config.HF_HOME
+    ).to(device).eval()
+    print(f"Loading DreamSim model: {config.DREAMSIM_MODEL_NAME}...")
+    dreamsim_model, _ = dreamsim(
+        model_name=config.DREAMSIM_MODEL_NAME,
+        pretrained=True,
+        device=device,
+        cache_dir=config.HF_HOME
+    )
+    dreamsim_model.eval()
+
+    print("All models loaded successfully.")
+    return {
+        "llm_generator": {"model": llm_model, "tokenizer": llm_tokenizer},
+        "vlm": vlm,
+        "object_detector": object_detector,
+        "clip": clip,
+        "dreamsim": dreamsim_model,  # NEW: Add DreamSim to the dictionary
+    }
+
+
+def load_processors() -> dict:
+    """Loads all necessary model processors from Hugging Face."""
+    return {
+        "vlm": PaliGemmaProcessor.from_pretrained(config.VLM_MODEL_NAME, cache_dir=config.HF_HOME),
+        "object_detector": OwlViTProcessor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME),
+        "clip": CLIPProcessor.from_pretrained(config.CLIP_MODEL_NAME, cache_dir=config.HF_HOME)
+    }
+
+
+# --- Visualization ---
+
+def save_image_grid(image_paths: List[str], output_path: str, title: str):
+    """Creates and saves a grid of images."""
+    if not image_paths:
+        print(f"No images to create a grid for '{title}'.")
+        return
+
+    # Determine grid size
+    num_images = len(image_paths)
+    grid_size = math.ceil(math.sqrt(num_images))
+
+    # Clamp grid size for very few images
+    if num_images <= 5:
+        grid_cols = num_images
+        grid_rows = 1
+    else:
+        grid_cols = grid_rows = grid_size
+
+    cell_size = 224
+    header_height = 50
+    grid_width = grid_cols * cell_size
+    grid_height = grid_rows * cell_size + header_height
+
+    grid_image = Image.new('RGB', (grid_width, grid_height), 'white')
+
+    try:
+        font = ImageFont.truetype("arial.ttf", 24)
+    except IOError:
+        font = ImageFont.load_default()
+
+    draw = ImageDraw.Draw(grid_image)
+    draw.text((10, 10), title, fill="black", font=font)
+
+    for i, path in enumerate(image_paths):
+        if i >= grid_cols * grid_rows:
+            break
+        try:
+            img = Image.open(path).resize((cell_size, cell_size))
+            row = i // grid_cols
+            col = i % grid_cols
+            grid_image.paste(img, (col * cell_size, row * cell_size + header_height))
+        except Exception as e:
+            print(f"Could not load image {path} for grid: {e}")
+
+    grid_image.save(output_path)
+    print(f"Saved image grid to {output_path}")
+
+
+def save_cluster_grids(clusters: Dict[int, List[int]], all_image_paths: List[str], output_path: str):
+    """Saves a visualization of all clusters as a single large image."""
+    if not clusters:
+        print("No clusters to visualize.")
+        return
+
+    cluster_images = []
+    max_images_per_cluster_vis = 10  # Limit images shown per cluster for readability
+
+    for cluster_id, image_indices in sorted(clusters.items()):
+        cluster_title = f"Cluster {cluster_id} ({len(image_indices)} images)"
+        paths = [all_image_paths[i] for i in image_indices[:max_images_per_cluster_vis]]
+
+        # Create a small grid for each cluster
+        num_images = len(paths)
+        if num_images == 0: continue
+
+        cell_size = 128
+        header_height = 30
+
+        # Make the grid horizontal
+        grid_cols = num_images
+        grid_rows = 1
+
+        grid_width = grid_cols * cell_size
+        grid_height = grid_rows * cell_size + header_height
+
+        grid = Image.new('RGB', (grid_width, grid_height), 'lightgray')
+        draw = ImageDraw.Draw(grid)
+        try:
+            font = ImageFont.truetype("arial.ttf", 16)
+        except IOError:
+            font = ImageFont.load_default()
+        draw.text((5, 5), cluster_title, fill="black", font=font)
+
+        for i, path in enumerate(paths):
+            try:
+                img = Image.open(path).resize((cell_size, cell_size))
+                grid.paste(img, (i * cell_size, header_height))
+            except Exception as e:
+                print(f"Could not load image {path} for cluster grid: {e}")
+
+        cluster_images.append(grid)
+
+    if not cluster_images:
+        print("Failed to generate any cluster images.")
+        return
+
+    # Combine all cluster grids into one tall image
+    total_width = max(img.width for img in cluster_images)
+    total_height = sum(img.height for img in cluster_images)
+
+    final_image = Image.new('RGB', (total_width, total_height), 'white')
+    current_y = 0
+    for img in cluster_images:
+        final_image.paste(img, (0, current_y))
+        current_y += img.height
+
+    final_image.save(output_path)
