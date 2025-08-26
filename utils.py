@@ -1,4 +1,3 @@
-
 # Helper functions for loading models, preprocessing images, and visualization.
 
 import torch
@@ -41,7 +40,7 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         vlm_model_name,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         cache_dir=config.HF_HOME,
-        token = hf_token
+        token=hf_token
     ).to(device).eval()
 
     # Object Detector
@@ -56,14 +55,16 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         config.CLIP_MODEL_NAME,
         torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
         cache_dir=config.HF_HOME,
-        token = hf_token,
+        token=hf_token,
     ).to(device).eval()
     print(f"Loading DreamSim model: {config.DREAMSIM_MODEL_NAME}...")
     dreamsim_model, _ = dreamsim(
-        model_name=config.DREAMSIM_MODEL_NAME,
         pretrained=True,
         device=device,
         cache_dir=config.HF_HOME,
+        normalize_embeds=True,
+        dreamsim_type="ensemble",
+        use_patch_model=False
     )
     dreamsim_model.eval()
 
@@ -83,7 +84,8 @@ def load_processors() -> dict:
         hf_token = f.read().strip()
     return {
         "vlm": PaliGemmaProcessor.from_pretrained(config.VLM_MODEL_NAME, cache_dir=config.HF_HOME, token=hf_token),
-        "object_detector": OwlViTProcessor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME, token=hf_token),
+        "object_detector": OwlViTProcessor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME,
+                                                           token=hf_token),
         "clip": CLIPProcessor.from_pretrained(config.CLIP_MODEL_NAME, cache_dir=config.HF_HOME, token=hf_token)
     }
 
