@@ -26,7 +26,7 @@ def load_models(vlm_model_name: str, device: str) -> dict:
     with open(config.HF_TOKEN_PATH) as f:
         hf_token = f.read().strip()
     # LLM for Query Generation
-    llm_tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME)
+    llm_tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME, token=hf_token,)
     # Use bfloat16 for memory efficiency if available
     llm_model = AutoModelForCausalLM.from_pretrained(
         config.LLM_MODEL_NAME,
