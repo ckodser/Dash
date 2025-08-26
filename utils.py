@@ -5,7 +5,7 @@ import torch
 from transformers import (
     AutoModelForCausalLM, AutoTokenizer,
     PaliGemmaForConditionalGeneration, PaliGemmaProcessor,
-    OwlViTForObjectDetection, OwlViTProcessor,
+    Owlv2ForObjectDetection, Owlv2Processor,
     CLIPModel, CLIPProcessor
 )
 from PIL import Image, ImageDraw, ImageFont
@@ -45,7 +45,7 @@ def load_models(vlm_model_name: str, device: str) -> dict:
     ).to(device).eval()
 
     # Object Detector
-    object_detector = OwlViTForObjectDetection.from_pretrained(
+    object_detector = Owlv2ForObjectDetection.from_pretrained(
         config.OBJECT_DETECTOR_MODEL_NAME,
         cache_dir=config.HF_HOME,
         token=hf_token,
