@@ -23,7 +23,8 @@ import config
 def load_models(vlm_model_name: str, device: str) -> dict:
     """Loads all required models from Hugging Face and moves them to the specified device."""
     print("Loading all models... This might take a while.")
-
+    with open(config.HF_TOKEN_PATH) as f:
+        hf_token = f.read().strip()
     # LLM for Query Generation
     llm_tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME)
     # Use bfloat16 for memory efficiency if available
@@ -31,20 +32,23 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         config.LLM_MODEL_NAME,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         device_map="auto",
-        cache_dir=config.HF_HOME
+        cache_dir=config.HF_HOME,
+        hf_token=hf_token,
     )
 
     # VLM for Filtering
     vlm = PaliGemmaForConditionalGeneration.from_pretrained(
         vlm_model_name,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        cache_dir=config.HF_HOME
+        cache_dir=config.HF_HOME,
+        hf_token = hf_token
     ).to(device).eval()
 
     # Object Detector
     object_detector = OwlViTForObjectDetection.from_pretrained(
         config.OBJECT_DETECTOR_MODEL_NAME,
-        cache_dir=config.HF_HOME
+        cache_dir=config.HF_HOME,
+        hf_token=hf_token,
     ).to(device).eval()
 
     # CLIP for Retrieval
@@ -58,7 +62,7 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         model_name=config.DREAMSIM_MODEL_NAME,
         pretrained=True,
         device=device,
-        cache_dir=config.HF_HOME
+        cache_dir=config.HF_HOME,
     )
     dreamsim_model.eval()
 
@@ -74,10 +78,12 @@ def load_models(vlm_model_name: str, device: str) -> dict:
 
 def load_processors() -> dict:
     """Loads all necessary model processors from Hugging Face."""
+    with open(config.HF_TOKEN_PATH) as f:
+        hf_token = f.read().strip()
     return {
-        "vlm": PaliGemmaProcessor.from_pretrained(config.VLM_MODEL_NAME, cache_dir=config.HF_HOME),
-        "object_detector": OwlViTProcessor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME),
-        "clip": CLIPProcessor.from_pretrained(config.CLIP_MODEL_NAME, cache_dir=config.HF_HOME)
+        "vlm": PaliGemmaProcessor.from_pretrained(config.VLM_MODEL_NAME, cache_dir=config.HF_HOME, hf_token=hf_token),
+        "object_detector": OwlViTProcessor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME, hf_token=hf_token),
+        "clip": CLIPProcessor.from_pretrained(config.CLIP_MODEL_NAME, cache_dir=config.HF_HOME,hf_token=hf_token)
     }
 
 

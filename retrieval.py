@@ -144,3 +144,5 @@ class Retriever:
 
         return unique_images
 
+
+# pip install torch torchvision  transformers accelerate bitsandbytes  pillow scikit-learn faiss-cpu tqdm  sentencepiece dreamsim

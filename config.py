@@ -6,7 +6,7 @@ import os
 
 
 # --- Model Configuration ---
-
+HF_TOKEN_PATH = "./hf_token.txt"
 HF_HOME = "/cmlscratch/asoltan3/.cache"
 # VLM to be tested for hallucinations (as per the paper)
 VLM_MODEL_NAME = "google/paligemma-3b-mix-224"
