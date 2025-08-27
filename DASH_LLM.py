@@ -10,7 +10,7 @@ import json
 
 # Import all our custom modules
 import config
-import utils
+import pipeline_utils
 from data import COCO
 from query_generator import DASH_LLM_QueryGenerator
 from retrieval import Retriever
