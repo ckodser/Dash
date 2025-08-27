@@ -84,7 +84,7 @@ def load_processors() -> dict:
         hf_token = f.read().strip()
     return {
         "vlm": PaliGemmaProcessor.from_pretrained(config.VLM_MODEL_NAME, cache_dir=config.HF_HOME, token=hf_token),
-        "object_detector": OwlViTProcessor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME,
+        "object_detector": Owlv2Processor.from_pretrained(config.OBJECT_DETECTOR_MODEL_NAME, cache_dir=config.HF_HOME,
                                                            token=hf_token),
         "clip": CLIPProcessor.from_pretrained(config.CLIP_MODEL_NAME, cache_dir=config.HF_HOME, token=hf_token)
     }
