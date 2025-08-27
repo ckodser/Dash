@@ -10,11 +10,13 @@ import torch
 from typing import List
 
 import config
+import data
 
 
 class Retriever:
-    def __init__(self, dataset: str, clip_model, clip_processor, dreamsim_model, device: str):
+    def __init__(self, dataset: data.COCO, clip_model, clip_processor, dreamsim_model, device: str):
         self.dataset = dataset
+        self.image_ids = self.dataset.get_imgIds()
         self.clip_model = clip_model
         self.clip_processor = clip_processor
         self.dreamsim_model = dreamsim_model
@@ -22,9 +24,8 @@ class Retriever:
         self.index = None
 
     @torch.no_grad()
-    def _encode_images(self, image_paths: list) -> np.ndarray:
+    def _encode_images(self, images: list) -> np.ndarray:
         """Encodes a batch of images using the CLIP model."""
-        images = [Image.open(path).convert("RGB") for path in image_paths]
         inputs = self.clip_processor(images=images, return_tensors="pt").to(self.device)
 
         # Handle potential dtype issues
@@ -53,17 +54,14 @@ class Retriever:
             self.index = faiss.read_index(config.FAISS_INDEX_PATH)
             assert self.index.ntotal == len(self.dataset), "Index size mismatch with image count!"
             return
-        it = iter(self.dataset)
-        print("SH", next(it)[0].shape)
-        print("SH", next(it)[0].shape)
-        print("Building new FAISS index for the image dataset...")
-        dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=config.retriever_batch_size, shuffle=False, num_workers=4)
-        all_features = []
 
-        for images, paths in tqdm(dataloader, desc="Encoding Images"):
-            print(images.shape, len(paths), paths[0])
-            exit(0)
-            batch_features = self._encode_images(images)
+        print("Building new FAISS index for the image dataset...")
+        all_features = []
+        batch_size = config.retriever_batch_size
+        for i in tqdm(range(0, len(self.image_ids), batch_size), desc="Encoding Images"):
+            batch_ids = self.image_ids[i:i + batch_size]
+            batch_images = [self.dataset(id)[0] for id in batch_ids]
+            batch_features = self._encode_images(batch_images)
             all_features.append(batch_features)
 
         all_features = np.vstack(all_features)
@@ -146,5 +144,3 @@ class Retriever:
 
         return unique_images
 
-
-# pip install torch torchvision  transformers accelerate bitsandbytes  pillow scikit-learn faiss-cpu tqdm  sentencepiece dreamsim

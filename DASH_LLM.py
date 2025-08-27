@@ -41,11 +41,6 @@ def run_pipeline(target_object: str, target_vlm: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    dataset = COCO(config.DATASET_DIR)
-    images = dataset.get_imgIds()
-    print(f"Found {len(images)} images")
-    print("SH", dataset[images[0]][0].shape, dataset[images[1]][0].shape)
-
     models = pipeline_utils.load_models(target_vlm, device)
     llm_generator = models['llm_generator']
     vlm_filter_model = models['vlm']
@@ -71,7 +66,7 @@ def run_pipeline(target_object: str, target_vlm: str):
     # 3. EXPLORATION PHASE
     # ====================
     print("\n[Phase 3/5] Running Exploration Phase...")
-
+    dataset = COCO(config.DATASET_DIR)
     retriever = Retriever(
         dataset=dataset,
         clip_model=clip_model,

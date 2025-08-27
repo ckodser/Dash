@@ -37,9 +37,7 @@ class COCO(Dataset):
     def __getitem__(self, idx):
         img = self.im_dict[idx]
         path = os.path.join(self.image_dir, img['file_name'])
-        image = default_loader(path)
-        if self.transform is not None:
-            image = image.resize(self.transform, Image.LANCZOS)
+        image = Image.open(path).convert("RGB")
 
         return image, path
 
