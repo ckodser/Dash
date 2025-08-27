@@ -60,7 +60,7 @@ class Retriever:
         batch_size = config.retriever_batch_size
         for i in tqdm(range(0, len(self.image_ids), batch_size), desc="Encoding Images"):
             batch_ids = self.image_ids[i:i + batch_size]
-            batch_images = [self.dataset(id)[0] for id in batch_ids]
+            batch_images = [self.dataset[id][0] for id in batch_ids]
             batch_features = self._encode_images(batch_images)
             all_features.append(batch_features)
 
