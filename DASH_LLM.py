@@ -42,14 +42,14 @@ def run_pipeline(target_object: str, target_vlm: str):
     print(f"Using device: {device}")
 
 
-    models = utils.load_models(target_vlm, device)
+    models = pipeline_utils.load_models(target_vlm, device)
     llm_generator = models['llm_generator']
     vlm_filter_model = models['vlm']
     object_detector = models['object_detector']
     clip_model = models['clip']
     dreamsim_model = models['dreamsim']
 
-    processors = utils.load_processors()
+    processors = pipeline_utils.load_processors()
     vlm_processor = processors['vlm']
     object_detector_processor = processors['object_detector']
     clip_processor = processors['clip']
@@ -98,7 +98,7 @@ def run_pipeline(target_object: str, target_vlm: str):
     exploration_candidates = sorted(list(set(exploration_candidates)))
     print(f"Found {len(exploration_candidates)} successful candidates after Exploration.")
 
-    utils.save_image_grid(
+    pipeline_utils.save_image_grid(
         exploration_candidates,
         os.path.join(config.OUTPUT_DIR, f"{target_object}_exploration_results.png"),
         "Exploration Phase Results"
@@ -128,7 +128,7 @@ def run_pipeline(target_object: str, target_vlm: str):
     exploitation_candidates = sorted(list(set(exploitation_candidates) - set(exploration_candidates)))
     print(f"Found {len(exploitation_candidates)} new, unique candidates after Exploitation and De-duplication.")
 
-    utils.save_image_grid(
+    pipeline_utils.save_image_grid(
         exploitation_candidates,
         os.path.join(config.OUTPUT_DIR, f"{target_object}_exploitation_results.png"),
         "Exploitation Phase Results"
@@ -157,7 +157,7 @@ def run_pipeline(target_object: str, target_vlm: str):
     print(f"Clustering complete. Found {len(clusters)} clusters.")
     print(f"Results saved to {output_clusters_path}")
 
-    utils.save_cluster_grids(
+    pipeline_utils.save_cluster_grids(
         clusters,
         all_successful_images,
         os.path.join(config.OUTPUT_DIR, f"{target_object}_clusters_visualization.png")
