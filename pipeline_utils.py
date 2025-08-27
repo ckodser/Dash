@@ -92,51 +92,15 @@ def load_processors() -> dict:
 
 # --- Visualization ---
 
-def save_image_grid(image_paths: List[str], output_path: str, title: str):
-    """Creates and saves a grid of images."""
-    if not image_paths:
-        print(f"No images to create a grid for '{title}'.")
-        return
+def save_images(images: List[Image], target_object: str, title: str):
+    """Creates and saves a group of images."""
 
-    # Determine grid size
-    num_images = len(image_paths)
-    grid_size = math.ceil(math.sqrt(num_images))
+    output_dir = os.path.join(config.OUTPUT_DIR, f"{title}_{target_object}")
 
-    # Clamp grid size for very few images
-    if num_images <= 5:
-        grid_cols = num_images
-        grid_rows = 1
-    else:
-        grid_cols = grid_rows = grid_size
+    for i,image in enumerate(images):
+        image.save(os.path.join(output_dir, f"image_{i}.png"))
 
-    cell_size = 224
-    header_height = 50
-    grid_width = grid_cols * cell_size
-    grid_height = grid_rows * cell_size + header_height
-
-    grid_image = Image.new('RGB', (grid_width, grid_height), 'white')
-
-    try:
-        font = ImageFont.truetype("arial.ttf", 24)
-    except IOError:
-        font = ImageFont.load_default()
-
-    draw = ImageDraw.Draw(grid_image)
-    draw.text((10, 10), title, fill="black", font=font)
-
-    for i, path in enumerate(image_paths):
-        if i >= grid_cols * grid_rows:
-            break
-        try:
-            img = Image.open(path).resize((cell_size, cell_size))
-            row = i // grid_cols
-            col = i % grid_cols
-            grid_image.paste(img, (col * cell_size, row * cell_size + header_height))
-        except Exception as e:
-            print(f"Could not load image {path} for grid: {e}")
-
-    grid_image.save(output_path)
-    print(f"Saved image grid to {output_path}")
+    print(f"Saved images to {output_dir}")
 
 
 def save_cluster_grids(clusters: Dict[int, List[int]], all_image_paths: List[str], output_path: str):

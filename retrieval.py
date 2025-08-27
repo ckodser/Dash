@@ -49,7 +49,7 @@ class Retriever:
         Builds a FAISS index for all images in the directory.
         If an index file already exists, it loads it.
         """
-        if os.path.exists(config.FAISS_INDEX_PATH) and False:
+        if os.path.exists(config.FAISS_INDEX_PATH):
             print(f"Loading existing FAISS index from {config.FAISS_INDEX_PATH}")
             self.index = faiss.read_index(config.FAISS_INDEX_PATH)
             assert self.index.ntotal == len(self.dataset), "Index size mismatch with image count!"
@@ -63,7 +63,7 @@ class Retriever:
             batch_images = [self.dataset[id][0] for id in batch_ids]
             batch_features = self._encode_images(batch_images)
             all_features.append(batch_features)
-
+            
         all_features = np.vstack(all_features)
 
         dimension = all_features.shape[1]
@@ -81,19 +81,19 @@ class Retriever:
         query_vector = self._encode_text(query_text)
         _, indices = self.index.search(query_vector, k)
 
-        return [self.image_paths[i] for i in indices[0]]
+        selected_image_ids = [self.image_ids[i] for i in indices[0]]
+        return [self.dataset[i][0] for i in selected_image_ids]
 
-    def retrieve_from_image(self, image_path: str, k: int) -> list:
+    def retrieve_from_image(self, image, k: int) -> list:
         """Retrieves the top-k most similar images for a given image query."""
         if self.index is None:
             raise RuntimeError("Index is not built. Call build_index() first.")
 
-        query_vector = self._encode_images([image_path])
+        query_vector = self._encode_images([image])
         _, indices = self.index.search(query_vector, k)
 
-        # The first result will be the image itself, so we retrieve k+1 and skip the first one.
-        # However, to be safe and simple, we'll just return k and let the main pipeline handle duplicates.
-        return [self.image_paths[i] for i in indices[0]]
+        selected_image_ids = [self.image_ids[i] for i in indices[0]]
+        return [self.dataset[i][0] for i in selected_image_ids]
 
     @torch.no_grad()
     def deduplicate(self, image_paths: List[str]) -> List[str]:

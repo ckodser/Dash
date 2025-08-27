@@ -52,13 +52,13 @@ class VLMFilter:
             True if the VLM's response contains "yes", False otherwise.
         """
         # The paper uses a specific prompt format.
-        prompt = f"Can you see a {object_label} in this image? Please answer only with yes or no."
+        prompt = f"<image>\nCan you see a {object_label} in this image? Please answer only with yes or no."
 
         inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
 
         # Handle potential dtype issues
-        if self.device == "cuda":
-            inputs = {k: v.to(torch.bfloat16) for k, v in inputs.items()}
+        if self.device == "cuda" and 'pixel_values' in inputs:
+            inputs['pixel_values'] = inputs['pixel_values'].to(torch.bfloat16)
 
         generate_ids = self.model.generate(**inputs, max_new_tokens=10)
 

@@ -56,12 +56,17 @@ def run_pipeline(target_object: str, target_vlm: str):
     # 2. QUERY GENERATION
     # ===================
     print(f"\n[Phase 2/5] Generating text queries for '{target_object}'...")
-    query_gen = DASH_LLM_QueryGenerator(llm_generator['model'], llm_generator['tokenizer'], device)
-    text_queries = query_gen.generate(target_object, num_queries=config.NUM_TEXT_QUERIES)
-    print(f"Generated {len(text_queries)} unique text queries.")
-
-    with open(os.path.join(config.OUTPUT_DIR, f"{target_object}_queries.json"), 'w') as f:
-        json.dump(text_queries, f, indent=2)
+    query_generator_dest = os.path.join(config.OUTPUT_DIR, f"{target_object}_queries.json")
+    if os.path.exists(query_generator_dest):
+        with open(query_generator_dest, 'r') as f:
+            text_queries = json.load(f)
+    else:
+        query_gen = DASH_LLM_QueryGenerator(llm_generator['model'], llm_generator['tokenizer'], device)
+        text_queries = query_gen.generate(target_object, num_queries=config.NUM_TEXT_QUERIES)
+        print(f"Generated {len(text_queries)} unique text queries.")
+    
+        with open(query_generator_dest, 'w') as f:
+            json.dump(text_queries, f, indent=2)
 
     # 3. EXPLORATION PHASE
     # ====================
@@ -82,24 +87,19 @@ def run_pipeline(target_object: str, target_vlm: str):
     exploration_candidates = []
     print(f"Retrieving images for {len(text_queries)} text queries...")
     for query in tqdm(text_queries, desc="Exploration"):
-        retrieved_paths = retriever.retrieve_from_text(query, k=config.EXPLORATION_K)
+        retrieved_images = retriever.retrieve_from_text(query, k=config.EXPLORATION_K)
 
-        for img_path in retrieved_paths:
-            try:
-                image = Image.open(img_path).convert("RGB")
-                if not od_filter.is_object_present(image, target_object) and \
-                        vlm_filter.is_object_present(image, target_object):
-                    exploration_candidates.append(img_path)
-            except Exception as e:
-                print(f"Warning: Could not process image {img_path}. Error: {e}")
+        for image in retrieved_images:
+            if not od_filter.is_object_present(image, target_object) and \
+                    vlm_filter.is_object_present(image, target_object):
+                exploration_candidates.append(image)
 
-    exploration_candidates = sorted(list(set(exploration_candidates)))
     print(f"Found {len(exploration_candidates)} successful candidates after Exploration.")
 
-    pipeline_utils.save_image_grid(
+    pipeline_utils.save_images(
         exploration_candidates,
-        os.path.join(config.OUTPUT_DIR, f"{target_object}_exploration_results.png"),
-        "Exploration Phase Results"
+        target_object,
+        config.title
     )
 
     # 4. EXPLOITATION PHASE

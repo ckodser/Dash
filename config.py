@@ -5,6 +5,7 @@ import torch
 import os
 
 
+title = "coco_test"
 # --- Model Configuration ---
 HF_TOKEN_PATH = "./hf_token.txt"
 HF_HOME = "/fs/nexus-scratch/asoltan3/.cache"
