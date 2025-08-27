@@ -48,12 +48,14 @@ class Retriever:
         Builds a FAISS index for all images in the directory.
         If an index file already exists, it loads it.
         """
-        if os.path.exists(config.FAISS_INDEX_PATH):
+        if os.path.exists(config.FAISS_INDEX_PATH) and False:
             print(f"Loading existing FAISS index from {config.FAISS_INDEX_PATH}")
             self.index = faiss.read_index(config.FAISS_INDEX_PATH)
             assert self.index.ntotal == len(self.dataset), "Index size mismatch with image count!"
             return
-
+        it = iter(self.dataset)
+        print("SH", next(it)[0].shape)
+        print("SH", next(it)[0].shape)
         print("Building new FAISS index for the image dataset...")
         dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=config.retriever_batch_size, shuffle=False, num_workers=4)
         all_features = []
