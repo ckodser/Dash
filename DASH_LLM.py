@@ -11,11 +11,12 @@ import json
 # Import all our custom modules
 import config
 import pipeline_utils
+from pipeline_utils import image_difference, unique_images
 from data import COCO
 from query_generator import DASH_LLM_QueryGenerator
 from retrieval import Retriever
 from filters import ObjectDetectorFilter, VLMFilter
-from clustering import Clusterer  # MODIFIED: Uses DreamSim
+from clustering import Clusterer 
 
 
 def setup_directories():
@@ -47,6 +48,7 @@ def run_pipeline(target_object: str, target_vlm: str):
     object_detector = models['object_detector']
     clip_model = models['clip']
     dreamsim_model = models['dreamsim']
+    dreamsim_processor = models['dreamsim_processor']
 
     processors = pipeline_utils.load_processors()
     vlm_processor = processors['vlm']
@@ -77,6 +79,7 @@ def run_pipeline(target_object: str, target_vlm: str):
         clip_model=clip_model,
         clip_processor=clip_processor,
         dreamsim_model=dreamsim_model,
+        dreamsim_processor= dreamsim_processor, 
         device=device
     )
     retriever.build_index()
@@ -86,20 +89,21 @@ def run_pipeline(target_object: str, target_vlm: str):
 
     exploration_candidates = []
     print(f"Retrieving images for {len(text_queries)} text queries...")
-    for query in tqdm(text_queries, desc="Exploration"):
+    for j, query in enumerate(tqdm(text_queries, desc="Exploration")):
         retrieved_images = retriever.retrieve_from_text(query, k=config.EXPLORATION_K)
 
-        for image in retrieved_images:
-            if not od_filter.is_object_present(image, target_object) and \
-                    vlm_filter.is_object_present(image, target_object):
+        for i,image in enumerate(retrieved_images):
+            if ((not od_filter.is_object_present(image, target_object)) and vlm_filter.is_object_present(image, target_object)) or i==j==0:
                 exploration_candidates.append(image)
-
+    
+    exploration_candidates = unique_images(exploration_candidates)
     print(f"Found {len(exploration_candidates)} successful candidates after Exploration.")
-
-    pipeline_utils.save_images(
+    exploration_candidates_embed = retriever.get_embeds(exploration_candidates)
+    print("SHAAAAAAAAAAPE", exploration_candidates_embed.shape)
+    exploration_candidates_with_path = pipeline_utils.save_images(
         exploration_candidates,
         target_object,
-        config.title
+        config.title + "Exploration_Phase_Results"
     )
 
     # 4. EXPLOITATION PHASE
@@ -110,43 +114,43 @@ def run_pipeline(target_object: str, target_vlm: str):
 
     print("\n[Phase 4/5] Running Exploitation Phase...")
     exploitation_candidates_raw = []
-    for img_path in tqdm(exploration_candidates, desc="Exploitation"):
-        retrieved_paths = retriever.retrieve_from_image(img_path, k=config.EXPLOITATION_K)
-        exploitation_candidates_raw.extend(retrieved_paths)
+    for i, img_path in enumerate(tqdm(exploration_candidates, desc="Exploitation")):
+        retrieved_images = retriever.retrieve_from_image(img_path, k=config.EXPLOITATION_K)
+        for j, image in enumerate(retrieved_images):
+            if ((not od_filter.is_object_present(image, target_object)) and vlm_filter.is_object_present(image, target_object)) or (i==0 and j==2):
+                exploitation_candidates_raw.append(image)
 
     # Remove duplicates from the initial retrieved set
-    exploitation_candidates_raw = sorted(list(set(exploitation_candidates_raw)))
+    exploitation_candidates_raw = image_difference(unique_images(exploitation_candidates_raw), exploration_candidates)
 
     print(f"Retrieved {len(exploitation_candidates_raw)} raw candidates. Now de-duplicating...")
 
     # NEW: De-duplication step using DreamSim as specified in the paper
-    exploitation_candidates = retriever.deduplicate(exploitation_candidates_raw)
+    exploitation_candidates, exploitation_candidates_embed = retriever.deduplicate(exploitation_candidates_raw)
 
-    # Final cleanup
-    exploitation_candidates = sorted(list(set(exploitation_candidates) - set(exploration_candidates)))
     print(f"Found {len(exploitation_candidates)} new, unique candidates after Exploitation and De-duplication.")
 
-    pipeline_utils.save_image_grid(
+    exploitation_candidates_with_path = pipeline_utils.save_images(
         exploitation_candidates,
-        os.path.join(config.OUTPUT_DIR, f"{target_object}_exploitation_results.png"),
-        "Exploitation Phase Results"
+        target_object,
+        config.title + "Exploitation_Phase_Results"
     )
 
     # 5. CLUSTERING
     # =============
     print("\n[Phase 5/5] Clustering final candidates using DreamSim...")
-    all_successful_images = sorted(list(set(exploration_candidates + exploitation_candidates)))
-
-    if len(all_successful_images) < 2:
+    all_successful_images_with_path = exploration_candidates_with_path + exploitation_candidates_with_path
+    all_successful_images_embed = torch.cat([exploration_candidates_embed, exploitation_candidates_embed], dim=0)
+    if len(all_successful_images_with_path) < 2:
         print("Not enough images to perform clustering. Need at least 2.")
         return
 
-    # MODIFIED: Clusterer now uses DreamSim
     clusterer = Clusterer(
         dreamsim_model=dreamsim_model,
+        dreamsim_processor= dreamsim_processor, 
         device=device
     )
-    clusters = clusterer.perform_clustering(all_successful_images)
+    clusters = clusterer.perform_clustering(all_successful_images_with_path, all_successful_images_embed)
 
     output_clusters_path = os.path.join(config.OUTPUT_DIR, f"{target_object}_clusters.json")
     with open(output_clusters_path, 'w') as f:
@@ -155,12 +159,6 @@ def run_pipeline(target_object: str, target_vlm: str):
     print(f"Clustering complete. Found {len(clusters)} clusters.")
     print(f"Results saved to {output_clusters_path}")
 
-    pipeline_utils.save_cluster_grids(
-        clusters,
-        all_successful_images,
-        os.path.join(config.OUTPUT_DIR, f"{target_object}_clusters_visualization.png")
-    )
-    print(f"Cluster visualization saved.")
     print("\n✅ Pipeline finished successfully!")
 
 

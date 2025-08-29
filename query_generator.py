@@ -248,7 +248,7 @@ Now, generate the corrected list of 50 prompts."""
 
         outputs = self.model.generate(
             **inputs,
-            max_new_tokens=4096,  # Increased token limit for the detailed prompt
+            max_new_tokens=40096,  # Increased token limit for the detailed prompt
             num_return_sequences=1,
             do_sample=True,
             temperature=0.6,

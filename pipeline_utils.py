@@ -13,8 +13,35 @@ import os
 import math
 from typing import Dict, List
 from dreamsim import dreamsim
+import hashlib
 
 import config
+
+
+# --- Image hashing and math ---
+
+
+def image_hash(img: Image.Image) -> str:
+    """Generate a hash for a PIL image for comparison."""
+    # Use pixel data only (metadata ignored)
+    return hashlib.md5(img.tobytes()).hexdigest()
+
+def image_difference(list_a, list_b):
+    """Return images in list_a that are not in list_b."""
+    hashes_b = {image_hash(img) for img in list_b}
+    return [img for img in list_a if image_hash(img) not in hashes_b]
+
+def unique_images(images):
+    """Return unique images from a list (removes duplicates)."""
+    seen = set()
+    unique = []
+    for img in images:
+        h = image_hash(img)
+        if h not in seen:
+            seen.add(h)
+            unique.append(img)
+    return unique
+
 
 
 # --- Model Loading ---
@@ -58,7 +85,7 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         token=hf_token,
     ).to(device).eval()
     print(f"Loading DreamSim model: {config.DREAMSIM_MODEL_NAME}...")
-    dreamsim_model, _ = dreamsim(
+    dreamsim_model, dreamsim_processor = dreamsim(
         pretrained=True,
         device=device,
         cache_dir=config.HF_HOME,
@@ -74,7 +101,8 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         "vlm": vlm,
         "object_detector": object_detector,
         "clip": clip,
-        "dreamsim": dreamsim_model,  # NEW: Add DreamSim to the dictionary
+        "dreamsim": dreamsim_model, 
+        "dreamsim_processor": dreamsim_processor
     }
 
 
@@ -94,13 +122,14 @@ def load_processors() -> dict:
 
 def save_images(images: List[Image], target_object: str, title: str):
     """Creates and saves a group of images."""
-
+    images_with_path = []
     output_dir = os.path.join(config.OUTPUT_DIR, f"{title}_{target_object}")
-
+    os.makedirs(output_dir, exist_ok=True)
     for i,image in enumerate(images):
         image.save(os.path.join(output_dir, f"image_{i}.png"))
-
+        images_with_path.append((image, os.path.join(output_dir, f"image_{i}.png")))
     print(f"Saved images to {output_dir}")
+    return images_with_path
 
 
 def save_cluster_grids(clusters: Dict[int, List[int]], all_image_paths: List[str], output_path: str):

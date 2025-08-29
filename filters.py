@@ -64,8 +64,7 @@ class VLMFilter:
 
         response = \
         self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-        # The response is often in the format: `prompt\n\nANSWER`. We extract the answer.
-        answer = response.split(prompt)[-1].strip().lower()
-
-        return "yes" in answer
+        
+        answer = response.split("Please answer only with yes or no.")[-1].strip().strip(".").strip("_").lower()
+        answer = ("yes" in answer)
+        return answer

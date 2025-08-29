@@ -14,12 +14,13 @@ import data
 
 
 class Retriever:
-    def __init__(self, dataset: data.COCO, clip_model, clip_processor, dreamsim_model, device: str):
+    def __init__(self, dataset: data.COCO, clip_model, clip_processor, dreamsim_model, dreamsim_processor, device: str):
         self.dataset = dataset
         self.image_ids = self.dataset.get_imgIds()
         self.clip_model = clip_model
         self.clip_processor = clip_processor
         self.dreamsim_model = dreamsim_model
+        self.dreamsim_processor = dreamsim_processor
         self.device = device
         self.index = None
 
@@ -80,67 +81,60 @@ class Retriever:
 
         query_vector = self._encode_text(query_text)
         _, indices = self.index.search(query_vector, k)
-
-        selected_image_ids = [self.image_ids[i] for i in indices[0]]
+        selected_image_ids = [self.image_ids[image_id] for image_id in indices[0]]
         return [self.dataset[i][0] for i in selected_image_ids]
 
-    def retrieve_from_image(self, image, k: int) -> list:
+    def retrieve_from_image(self, image: Image, k: int) -> list:
         """Retrieves the top-k most similar images for a given image query."""
         if self.index is None:
             raise RuntimeError("Index is not built. Call build_index() first.")
 
         query_vector = self._encode_images([image])
         _, indices = self.index.search(query_vector, k)
-
         selected_image_ids = [self.image_ids[i] for i in indices[0]]
-        return [self.dataset[i][0] for i in selected_image_ids]
+        return [self.dataset[image_id][0] for image_id in selected_image_ids]
 
     @torch.no_grad()
-    def deduplicate(self, image_paths: List[str]) -> List[str]:
+    def get_embeds(self, images: List[Image]):
+        unique_embeddings_tensor = None
+
+        for i in tqdm(range(0, len(images)), desc="Computing embeddings"):
+            image_tensor = self.dreamsim_processor(images[i]).to(self.device)
+            current_embedding = self.dreamsim_model.embed(image_tensor)
+            current_embedding = current_embedding/torch.linalg.norm(current_embedding)
+            if unique_embeddings_tensor is None:
+                unique_embeddings_tensor = current_embedding
+            else:
+                unique_embeddings_tensor = torch.cat([unique_embeddings_tensor, current_embedding], dim=0)
+                    
+        return unique_embeddings_tensor
+
+        
+    @torch.no_grad()
+    def deduplicate(self, images: List[Image]):
         """
         Filters a list of images to remove near-duplicates using DreamSim.
         """
-        if len(image_paths) < 2:
-            return image_paths
+        if len(images) < 2:
+            return images, self.get_embeds(images)
 
-        unique_images = []
-        # This is a greedy approach. For each image, we check if it's too similar
-        # to any image already in our `unique_images` list.
-        for i, path1 in enumerate(tqdm(image_paths, desc="De-duplicating")):
-            is_duplicate = False
-            if not unique_images:
-                unique_images.append(path1)
-                continue
+        unique_indices = []
+        unique_embeddings_tensor = None
 
-            # Compare the new candidate with all confirmed unique images
-            # This is computationally intensive (O(n^2)) but accurate for smaller sets.
-            # For larger sets, a more optimized clustering approach would be needed.
-            img1 = Image.open(path1).convert("RGB")
-            for path2 in unique_images:
-                img2 = Image.open(path2).convert("RGB")
+        for i in tqdm(range(0, len(images)), desc="Computing embeddings"):
+            image_tensor = self.dreamsim_processor(images[i]).to(self.device)
+            current_embedding = self.dreamsim_model.embed(image_tensor)
+            current_embedding = current_embedding/torch.linalg.norm(current_embedding)
+            if unique_embeddings_tensor is None:
+                unique_embeddings_tensor = current_embedding
+                unique_indices.append(i)
+            else:
+                distances = unique_embeddings_tensor@current_embedding.T
+                if distances.max() <= config.DEDUPLICATION_THRESHOLD:
+                    unique_indices.append(i)
+                    # Add the new unique embedding for future comparisons
+                    unique_embeddings_tensor = torch.cat([unique_embeddings_tensor, current_embedding], dim=0)
+        unique_images = [images[i] for i in unique_indices]
 
-                # DreamSim expects a batch of images
-                similarity = self.dreamsim_model(
-                    torch.stack([self.dreamsim_model.preprocess(img) for img in [img1, img2]]).to(self.device)
-                )
-                # The output is a distance, so similarity is 1 - distance, but the model returns similarity directly.
-                # Let's assume the model returns a single similarity score for the pair.
-                # The actual dreamsim library might have a different API, this is an adaptation.
-                # A more efficient way is to embed all and compute pairwise similarity.
-                # For simplicity here, we do it one by one.
-                score = similarity[0]  # Placeholder for actual pairwise score
-
-                # The model returns a distance matrix, we need to extract the score
-                # This is a simplified call; a real implementation would batch this.
-                dist = self.dreamsim_model.compute_distance(img1, img2)
-                score = 1 - dist.item()  # Convert distance to similarity
-
-                if score > config.DEDUPLICATION_THRESHOLD:
-                    is_duplicate = True
-                    break
-
-            if not is_duplicate:
-                unique_images.append(path1)
-
-        return unique_images
-
+        print(f"Original images: {len(images)}. Unique images: {len(unique_images)}.")
+        return unique_images, unique_embeddings_tensor
