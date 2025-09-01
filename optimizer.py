@@ -85,10 +85,11 @@ class DASH_OPT_Optimizer:
         prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = self.pipe.encode_prompt(
             text_prompt)
 
-        prompt_embeds.requires_grad_()
-        pooled_prompt_embeds.requires_grad_()
+        prompt_embeds_leaf = prompt_embeds.clone().detach().requires_grad_(True)
+        pooled_prompt_embeds_leaf = pooled_prompt_embeds.clone().detach().requires_grad_(True)
 
-        optimizer = torch.optim.Adam([prompt_embeds, pooled_prompt_embeds], lr=config.DASH_OPT_LR)
+
+        optimizer = torch.optim.Adam([prompt_embeds_leaf, pooled_prompt_embeds_leaf], lr=config.DASH_OPT_LR)
 
         best_loss = float('inf')
         best_image = None
@@ -104,8 +105,8 @@ class DASH_OPT_Optimizer:
             )
 
             image = self.pipe(
-                prompt_embeds=prompt_embeds,
-                pooled_prompt_embeds=pooled_prompt_embeds,
+                prompt_embeds=prompt_embeds_leaf,
+                pooled_prompt_embeds=pooled_prompt_embeds_leaf,
                 negative_prompt_embeds=negative_prompt_embeds,
                 negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
                 latents=latents,
