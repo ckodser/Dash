@@ -59,3 +59,10 @@ FAISS_INDEX_PATH = os.path.join(OUTPUT_DIR, "retrieval.index")
 # --- System ---
 # Determine device
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# --- DASH-OPT Specific Parameters ---
+# Number of optimization steps for generating each image (Paper Appendix C uses 25)
+DASH_OPT_STEPS = 25
+
+# Lambda weight for the detector loss in the optimization objective (Paper uses 1.0)
+DASH_OPT_LAMBDA = 1.0
