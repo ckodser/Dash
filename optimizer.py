@@ -44,7 +44,6 @@ class DASH_OPT_Optimizer:
 
         print("Distilled SDXL model loaded.")
 
-    @torch.no_grad()
     def _get_detector_confidence(self, image: Image.Image, object_label: str) -> torch.Tensor:
         """Gets the raw max confidence from the object detector."""
         texts = [[f"a photo of a {object_label}"]]
@@ -65,13 +64,13 @@ class DASH_OPT_Optimizer:
         """
         Gets the VLM's probability for the token 'Yes'.
         """
-        prompt = f"Can you see a {object_label} in this image? Please answer only with yes or no."
+        prompt = f"<image>\nCan you see a {object_label} in this image? Please answer only with yes or no."
         inputs = self.vlm_processor(text=prompt, images=image, return_tensors="pt").to(self.device,
                                                                                        dtype=torch.bfloat16)
 
-        with torch.no_grad():
-            outputs = self.vlm(**inputs)
-            logits = outputs.logits[0, -1, :]  # Get logits for the last token
+
+        outputs = self.vlm(**inputs)
+        logits = outputs.logits[0, -1, :]  # Get logits for the last token
 
         yes_token_id = self.vlm_processor.tokenizer("Yes", add_special_tokens=False).input_ids[0]
 
