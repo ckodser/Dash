@@ -66,3 +66,20 @@ DASH_OPT_STEPS = 25
 
 # Lambda weight for the detector loss in the optimization objective (Paper uses 1.0)
 DASH_OPT_LAMBDA = 1.0
+
+# --- DASH-OPT Generation ---
+# Models for the distilled Stable Diffusion XL pipeline
+SDXL_BASE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+SDXL_UNET_MODEL_ID = "latent-consistency/lcm-sdxl"
+
+# Optimization parameters
+DASH_OPT_LR = 0.1
+DASH_OPT_INFERENCE_STEPS = 1
+DASH_OPT_GUIDANCE_SCALE = 1.0 # !!!!!!!!!!!!! NOT SURE ABOUT THIS.
+# The paper mentions thresholding the detector confidence before the loss calculation
+DASH_OPT_DETECTOR_THRESHOLD = 0.05
+
+# SDXL Latent space dimensions
+DASH_OPT_LATENT_CHANNELS = 4
+DASH_OPT_LATENT_HEIGHT = 128
+DASH_OPT_LATENT_WIDTH = 128

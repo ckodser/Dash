@@ -3,7 +3,6 @@
 
 import torch
 from diffusers import StableDiffusionXLPipeline, UNet2DConditionModel, LCMScheduler
-from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 from PIL import Image
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -26,27 +25,21 @@ class DASH_OPT_Optimizer:
         """
         print("Loading Distilled SDXL model for DASH-OPT...")
 
-        # As per paper Appendix C, using a distilled version of SDXL.
-        # We use a 1-step LCM LoRA model for speed and efficiency.
-        base_model_id = "stabilityai/stable-diffusion-xl-base-1.0"
-        lcm_lora_id = "latent-consistency/lcm-lora-sdxl"
-
         unet = UNet2DConditionModel.from_pretrained(
-            "latent-consistency/lcm-sdxl",
+            config.SDXL_UNET_MODEL_ID,
             torch_dtype=torch.float16,
             variant="fp16",
             cache_dir=config.HF_HOME,
         )
 
         self.pipe = StableDiffusionXLPipeline.from_pretrained(
-            base_model_id,
+            config.SDXL_BASE_MODEL_ID,
             unet=unet,
             torch_dtype=torch.float16,
             variant="fp16",
             cache_dir=config.HF_HOME,
         ).to(self.device)
 
-        # Set scheduler
         self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
 
         print("Distilled SDXL model loaded.")
@@ -59,8 +52,9 @@ class DASH_OPT_Optimizer:
         outputs = self.object_detector(**inputs)
 
         target_sizes = torch.Tensor([image.size[::-1]]).to(self.device)
+        # Process without a threshold to get all potential scores
         results = self.od_processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes,
-                                                                  threshold=0.0)  # No threshold to get all scores
+                                                                  threshold=0.0)
 
         scores = results[0]['scores']
         if len(scores) == 0:
@@ -70,23 +64,17 @@ class DASH_OPT_Optimizer:
     def _get_vlm_yes_probability(self, image: Image.Image, object_label: str) -> torch.Tensor:
         """
         Gets the VLM's probability for the token 'Yes'.
-        This requires getting the logits for the next token prediction.
         """
         prompt = f"Can you see a {object_label} in this image? Please answer only with yes or no."
-
-        # Manually encode to get both image and text inputs
         inputs = self.vlm_processor(text=prompt, images=image, return_tensors="pt").to(self.device,
                                                                                        dtype=torch.bfloat16)
 
-        # Get the logits from the VLM
         with torch.no_grad():
             outputs = self.vlm(**inputs)
             logits = outputs.logits[0, -1, :]  # Get logits for the last token
 
-        # Find the token ID for "Yes"
         yes_token_id = self.vlm_processor.tokenizer("Yes", add_special_tokens=False).input_ids[0]
 
-        # Calculate probability using softmax
         probabilities = F.softmax(logits, dim=-1)
         return probabilities[yes_token_id]
 
@@ -94,13 +82,13 @@ class DASH_OPT_Optimizer:
         """
         The main optimization loop to generate a single hallucination-inducing image.
         """
-        # Encode the initial prompt
-        prompt_embeds, negative_prompt_embeds = self.pipe.encode_prompt(text_prompt)
-        prompt_embeds.requires_grad_()
+        prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = self.pipe.encode_prompt(
+            text_prompt)
 
-        # Paper Appendix C: Optimize the conditioning variables
-        # We optimize the prompt embeddings. A random latent is drawn each step.
-        optimizer = torch.optim.Adam([prompt_embeds], lr=0.1)
+        prompt_embeds.requires_grad_()
+        pooled_prompt_embeds.requires_grad_()
+
+        optimizer = torch.optim.Adam([prompt_embeds, pooled_prompt_embeds], lr=config.DASH_OPT_LR)
 
         best_loss = float('inf')
         best_image = None
@@ -109,31 +97,36 @@ class DASH_OPT_Optimizer:
         for step in pbar:
             optimizer.zero_grad()
 
-            # Generate image from current embeddings
-            latents = torch.randn((1, 4, 128, 128), device=self.device, dtype=torch.float16)
+            latents = torch.randn(
+                (1, config.DASH_OPT_LATENT_CHANNELS, config.DASH_OPT_LATENT_HEIGHT, config.DASH_OPT_LATENT_WIDTH),
+                device=self.device,
+                dtype=torch.float16
+            )
+
             image = self.pipe(
                 prompt_embeds=prompt_embeds,
+                pooled_prompt_embeds=pooled_prompt_embeds,
                 negative_prompt_embeds=negative_prompt_embeds,
+                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
                 latents=latents,
-                num_inference_steps=4,  # Fast generation with LCM
-                guidance_scale=1.0,
+                num_inference_steps=config.DASH_OPT_INFERENCE_STEPS,
+                guidance_scale=config.DASH_OPT_GUIDANCE_SCALE,
                 output_type="pil"
             ).images[0]
 
             # 1. VLM Loss
             prob_yes = self._get_vlm_yes_probability(image, object_label)
-            loss_vlm = -torch.log(prob_yes + 1e-9)  # Add epsilon for stability
+            loss_vlm = -torch.log(prob_yes + 1e-9)
 
             # 2. Detector Loss
             detector_confidence = self._get_detector_confidence(image, object_label)
-            # Threshold confidence as per Appendix C
-            detector_confidence_thresholded = torch.clamp(detector_confidence - 0.05, min=0.0)
+            detector_confidence_thresholded = torch.clamp(detector_confidence - config.DASH_OPT_DETECTOR_THRESHOLD,
+                                                          min=0.0)
             loss_det = -torch.log(1 - detector_confidence_thresholded + 1e-9)
 
             # 3. Total Loss
             total_loss = loss_vlm + config.DASH_OPT_LAMBDA * loss_det
 
-            # Backpropagation
             total_loss.backward()
             optimizer.step()
 
