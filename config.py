@@ -69,8 +69,10 @@ DASH_OPT_LAMBDA = 1.0
 
 # --- DASH-OPT Generation ---
 # Models for the distilled Stable Diffusion XL pipeline
-SDXL_BASE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
-SDXL_UNET_MODEL_ID = "latent-consistency/lcm-sdxl"
+# SDXL_BASE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+# SDXL_UNET_MODEL_ID = "latent-consistency/lcm-sdxl"
+SDXL_BASE_MODEL_ID = "segmind/tiny-sdxl"
+SDXL_UNET_MODEL_ID = "segmind/tiny-sdxl"
 
 # Optimization parameters
 DASH_OPT_LR = 0.1
