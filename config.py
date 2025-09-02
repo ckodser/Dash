@@ -69,17 +69,27 @@ DASH_OPT_LAMBDA = 1.0
 
 # --- DASH-OPT Generation ---
 # Models for the distilled Stable Diffusion XL pipeline
-# SDXL_BASE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
-# SDXL_UNET_MODEL_ID = "latent-consistency/lcm-sdxl"
-SDXL_BASE_MODEL_ID = "segmind/tiny-sdxl"
-SDXL_UNET_MODEL_ID = "segmind/tiny-sdxl"
+SDXL_BASE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+SDXL_UNET_MODEL_ID = "latent-consistency/lcm-sdxl"
 
-# Optimization parameters
+
+# --- Advanced Optimization Parameters (from Paper Appendix C) ---
+# Optimization hyperparams
 DASH_OPT_LR = 0.1
-DASH_OPT_INFERENCE_STEPS = 1
-DASH_OPT_GUIDANCE_SCALE = 1.0 # !!!!!!!!!!!!! NOT SURE ABOUT THIS.
+DASH_OPT_WARMUP_STEPS = 3          # Linear warmup over the first 3 steps
+DASH_OPT_GRAD_CLIP_NORM = 0.1      # Clip L2 norm of gradients to 0.1
+
+# Latent-specific optimization
+DASH_OPT_LATENT_LR_FACTOR = 0.1    # Step size factor of 0.1 for the latent
+DASH_OPT_CHI_SQUARE_REG_LAMBDA = 0.1 # Weight for the chi-square regularization loss
+
+# Diffusion process params
+DASH_OPT_START_TIMESTEP = 800      # Start timestep for LCM scheduler
+DASH_OPT_INFERENCE_STEPS = 1       # Single-step inference
+DASH_OPT_GUIDANCE_SCALE = 0.0      # Must be 0.0 for SDXL-Turbo
+
 # The paper mentions thresholding the detector confidence before the loss calculation
-DASH_OPT_DETECTOR_THRESHOLD = 0.05
+DASH_OPT_DETECTOR_THRESHOLD = 0.05 
 
 # SDXL Latent space dimensions
 DASH_OPT_LATENT_CHANNELS = 4

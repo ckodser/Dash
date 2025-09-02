@@ -53,29 +53,32 @@ def load_models(vlm_model_name: str, device: str) -> dict:
         hf_token = f.read().strip()
     # LLM for Query Generation
     llm_tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME, cache_dir=config.HF_HOME, token=hf_token)
-    # Use bfloat16 for memory efficiency if available
+
     llm_model = AutoModelForCausalLM.from_pretrained(
         config.LLM_MODEL_NAME,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         device_map="auto",
+        #load_in_8bit=True, ########## REMOVE ON A100 (add .to(device))
         cache_dir=config.HF_HOME,
         token=hf_token,
-    )
+    ).to("cuda:1")
 
     # VLM for Filtering
     vlm = PaliGemmaForConditionalGeneration.from_pretrained(
         vlm_model_name,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         cache_dir=config.HF_HOME,
+        #(add .to(device))
         token=hf_token
-    ).to(device).eval()
+    ).to("cuda:0").eval()
 
     # Object Detector
     object_detector = Owlv2ForObjectDetection.from_pretrained(
         config.OBJECT_DETECTOR_MODEL_NAME,
         cache_dir=config.HF_HOME,
+      #  load_in_8bit=True, ########## REMOVE ON A100 (add .to(device))
         token=hf_token,
-    ).to(device).eval()
+    ).to("cuda:1").eval()
 
     # CLIP for Retrieval
     clip = CLIPModel.from_pretrained(
